@@ -1,11 +1,17 @@
 // exporter.js (barrel)
-// Re-export functions from specific exporter modules.
-// Keep this file tiny and stable.
+// This file is the public API that listeners.js imports from.
+// It must export the legacy names to avoid import-time crashes.
 
 export {
   exportForLackey,
   generateLackeyCCGDeck
 } from "./exporter-lackey.js";
 
-export { exportDeckAsImage } from "./exporter-image.js";
-export { exportDeckAsText } from "./exporter-text.js";
+export {
+  exportDeckAsText,
+  generatePlainTextDeck
+} from "./exporter-text.js";
+
+export {
+  exportDeckAsImage
+} from "./exporter-image.js";
