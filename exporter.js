@@ -1,6 +1,11 @@
 // exporter.js (barrel)
-// Keep this file tiny. It only re-exports from specific exporter modules.
+// Re-export functions from specific exporter modules.
+// Keep this file tiny and stable.
 
-export { exportForLackey } from "./exporter-lackey.js";
+export {
+  exportForLackey,
+  generateLackeyCCGDeck
+} from "./exporter-lackey.js";
+
 export { exportDeckAsImage } from "./exporter-image.js";
 export { exportDeckAsText } from "./exporter-text.js";
