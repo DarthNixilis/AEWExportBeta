@@ -5,34 +5,79 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AEW Export Beta</title>
 
-  <!-- Optional but helpful if you ever accidentally use root-relative paths -->
+  <!-- Optional: uncomment ONLY if you insist on root-relative paths -->
   <!-- <base href="/AEWExportBeta/"> -->
 
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; padding: 16px; }
-    header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-    button { padding: 10px 12px; border-radius: 10px; border: 1px solid #ddd; background: #fff; }
-    button:active { transform: translateY(1px); }
-    .panel { margin-top: 14px; border: 1px solid #e5e5e5; border-radius: 12px; padding: 12px; }
-    .muted { opacity: 0.7; font-size: 12px; }
-    textarea { width: 100%; min-height: 180px; border-radius: 12px; border: 1px solid #ddd; padding: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      margin: 0;
+      padding: 16px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    button {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #ddd;
+      background: #fff;
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    .panel {
+      margin-top: 14px;
+      border: 1px solid #e5e5e5;
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .muted {
+      opacity: 0.7;
+      font-size: 12px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 180px;
+      border-radius: 12px;
+      border: 1px solid #ddd;
+      padding: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+        "Liberation Mono", "Courier New", monospace;
+    }
   </style>
 
-  <!-- 1) ERROR OVERLAY MUST LOAD FIRST -->
-  <script src="./error-overlay.js?v=1"></script>
+  <!-- 1) ERROR OVERLAY (must load first, non-module) -->
+  <script src="./error-overlay.js?v=2"></script>
 
-  <!-- 2) Your normal scripts (cache-busted) -->
-  <!-- Load exporter before main IF main references exportForLackey() -->
-  <script src="./exporter.js?v=13"></script>
-  <script src="./main.js?v=13" defer></script>
+  <!-- 2) MAIN APP (MODULE) -->
+  <script type="module" src="./main.js?v=14"></script>
 </head>
 
 <body>
   <header>
     <div>
       <h1 style="margin:0;">AEW Export Beta</h1>
-      <div class="muted">If anything breaks, you should get a popup with “Copy Debug”.</div>
+      <div class="muted">
+        If something breaks, a popup will appear with a Copy Debug button.
+      </div>
     </div>
 
     <div class="row">
@@ -43,25 +88,18 @@
 
   <div class="panel">
     <h2 style="margin-top:0;">Export Output</h2>
-    <div class="muted">This is just a visible place to dump export text on mobile.</div>
-    <textarea id="exportOutput" placeholder="Export text will appear here..."></textarea>
+    <div class="muted">
+      Visible output area for mobile debugging.
+    </div>
+    <textarea
+      id="exportOutput"
+      placeholder="Export text will appear here..."
+    ></textarea>
   </div>
 
-  <script>
-    // --- SAFE WIRING FOR THE TEST EXPORT BUTTON ---
-    // Assumptions:
-    // - exporter.js defines ONE of these globals:
-    //     window.exportForLackey()  (preferred)
-    //   OR window.AEWExporter.exportForLackey()
-    //
-    // - exportForLackey returns a string (recommended), OR writes somewhere else.
-    // If yours currently "downloads a file", that's fine too; this wrapper still catches errors.
-
-    function getExporterFn() {
-      if (typeof window.exportForLackey === "function") return window.exportForLackey;
-      if (window.AEWExporter && typeof window.AEWExporter.exportForLackey === "function") return window.AEWExporter.exportForLackey;
-      return null;
-    }
+  <!-- 3) UI + EXPORT WIRING (MODULE-SAFE) -->
+  <script type="module">
+    import { exportForLackey } from "./exporter.js";
 
     function showExportText(text) {
       const box = document.getElementById("exportOutput");
@@ -71,29 +109,24 @@
 
     function safeRunExport() {
       try {
-        const fn = getExporterFn();
-        if (!fn) {
+        if (typeof exportForLackey !== "function") {
           window.AEWError?.show(
-            "Exporter Not Found",
-            "Could not find exportForLackey(). Make sure exporter.js loads and defines window.exportForLackey (or window.AEWExporter.exportForLackey).",
-            "error",
-            { hint: "Check index.html script order + exporter.js global export function name." }
+            "Exporter Missing",
+            "exportForLackey is not a function. Check exporter.js exports.",
+            "error"
           );
           return;
         }
 
-        const result = fn(); // run export
+        const result = exportForLackey();
 
-        // If exporter returns a string, show it; otherwise show a friendly note
         if (typeof result === "string") {
           showExportText(result);
         } else if (result != null) {
-          // Sometimes folks return an object; show it anyway
           showExportText(JSON.stringify(result, null, 2));
         } else {
-          showExportText("[Export completed. No text returned by exporter.]");
+          showExportText("[Export completed. No text returned.]");
         }
-
       } catch (e) {
         window.AEWError?.show(
           "Export Failed",
@@ -104,20 +137,26 @@
       }
     }
 
-    // Hook buttons
-    document.getElementById("btnTestExport")?.addEventListener("click", safeRunExport);
+    document
+      .getElementById("btnTestExport")
+      ?.addEventListener("click", safeRunExport);
 
-    document.getElementById("btnCopyDebug")?.addEventListener("click", async () => {
-      try {
-        const text = window.AEWError?.exportText?.() || "No AEWError log available yet.";
-        await navigator.clipboard.writeText(text);
-        window.AEWError?.show("Copied", "Debug log copied to clipboard.", "info");
-      } catch (e) {
-        // Fallback if clipboard fails on the device/browser
-        const text = window.AEWError?.exportText?.() || "No AEWError log available yet.";
-        window.prompt("Copy debug log:", text);
-      }
-    });
+    document
+      .getElementById("btnCopyDebug")
+      ?.addEventListener("click", async () => {
+        try {
+          const text =
+            window.AEWError?.exportText?.() ||
+            "No AEWError log available yet.";
+          await navigator.clipboard.writeText(text);
+          window.AEWError?.show("Copied", "Debug log copied.", "info");
+        } catch {
+          const text =
+            window.AEWError?.exportText?.() ||
+            "No AEWError log available yet.";
+          window.prompt("Copy debug log:", text);
+        }
+      });
   </script>
 </body>
 </html>
