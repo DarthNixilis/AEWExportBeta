@@ -1,6 +1,4 @@
 // exporter-text.js
-// AEW TCG – Plain Text Exporter (ES module)
-// No side effects at load time.
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -18,7 +16,7 @@ function getDeckFromGlobals() {
     deck,
     "No deck found. Expected one of: window.currentDeck, window.deck, window.selectedDeck, window.deckList, window.activeDeck."
   );
-  assert(Array.isArray(deck), "Deck is not an array (export expects an array).");
+  assert(Array.isArray(deck), "Deck is not an array.");
   return deck;
 }
 
@@ -32,27 +30,11 @@ function getName(card) {
   return card?.name ?? card?.cardName ?? card?.title ?? "(Unnamed)";
 }
 
-/**
- * New name (internal-friendly): exportDeckAsText
- * Returns lines like: "3x Jon Moxley"
- */
 export function exportDeckAsText() {
   const deck = getDeckFromGlobals();
-
-  const lines = [];
-  for (const card of deck) {
-    const qty = getQty(card);
-    const name = getName(card);
-    lines.push(`${qty}x ${name}`);
-  }
-
-  if (deck.length === 0) lines.push("(Deck is empty)");
-
-  return lines.join("\n");
+  const lines = deck.map((c) => `${getQty(c)}x ${getName(c)}`);
+  return (lines.length ? lines : ["(Deck is empty)"]).join("\n");
 }
 
-/**
- * Legacy name expected by listeners.js.
- * Keep this forever.
- */
+// Legacy name expected by listeners.js
 export const generatePlainTextDeck = exportDeckAsText;
