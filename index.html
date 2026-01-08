@@ -5,16 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AEW Export Beta</title>
 
-  <!-- Optional: uncomment ONLY if you insist on root-relative paths -->
-  <!-- <base href="/AEWExportBeta/"> -->
-
   <style>
     body {
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
       margin: 0;
       padding: 16px;
     }
-
     header {
       display: flex;
       align-items: center;
@@ -22,37 +18,26 @@
       gap: 12px;
       flex-wrap: wrap;
     }
-
     .row {
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
       align-items: center;
     }
-
     button {
       padding: 10px 12px;
       border-radius: 10px;
       border: 1px solid #ddd;
       background: #fff;
     }
-
-    button:active {
-      transform: translateY(1px);
-    }
-
+    button:active { transform: translateY(1px); }
     .panel {
       margin-top: 14px;
       border: 1px solid #e5e5e5;
       border-radius: 12px;
       padding: 12px;
     }
-
-    .muted {
-      opacity: 0.7;
-      font-size: 12px;
-    }
-
+    .muted { opacity: 0.7; font-size: 12px; }
     textarea {
       width: 100%;
       min-height: 180px;
@@ -64,11 +49,16 @@
     }
   </style>
 
-  <!-- 1) ERROR OVERLAY (must load first, non-module) -->
-  <script src="./error-overlay.js?v=2"></script>
+  <!-- 1) Error overlay must load first (non-module) -->
+  <script src="./error-overlay.js?v=3"></script>
 
-  <!-- 2) MAIN APP (MODULE) -->
-  <script type="module" src="./main.js?v=14"></script>
+  <!--
+    2) Main app (module)
+    This keeps your existing architecture (main.js / listeners.js / etc) working.
+    main.js can import listeners.js, which can import ./exporter.js (the barrel),
+    which re-exports from exporter-lackey.js / exporter-image.js / exporter-text.js.
+  -->
+  <script type="module" src="./main.js?v=16"></script>
 </head>
 
 <body>
@@ -76,7 +66,7 @@
     <div>
       <h1 style="margin:0;">AEW Export Beta</h1>
       <div class="muted">
-        If something breaks, a popup will appear with a Copy Debug button.
+        Mobile-friendly error popups enabled. If something breaks, hit “Copy Debug Log”.
       </div>
     </div>
 
@@ -89,15 +79,18 @@
   <div class="panel">
     <h2 style="margin-top:0;">Export Output</h2>
     <div class="muted">
-      Visible output area for mobile debugging.
+      This is just a visible output box so you can see export results on Android.
     </div>
-    <textarea
-      id="exportOutput"
-      placeholder="Export text will appear here..."
-    ></textarea>
+    <textarea id="exportOutput" placeholder="Export text will appear here..."></textarea>
   </div>
 
-  <!-- 3) UI + EXPORT WIRING (MODULE-SAFE) -->
+  <!--
+    3) Button wiring (module)
+    This is independent of your app’s existing listeners.js.
+    It gives you a guaranteed “TEST EXPORT” button that will work as long as:
+      - exporter.js exports exportForLackey
+      - exporter-lackey.js implements exportForLackey
+  -->
   <script type="module">
     import { exportForLackey } from "./exporter.js";
 
@@ -112,7 +105,7 @@
         if (typeof exportForLackey !== "function") {
           window.AEWError?.show(
             "Exporter Missing",
-            "exportForLackey is not a function. Check exporter.js exports.",
+            "exportForLackey is not a function. Check exporter.js re-exports and exporter-lackey.js export.",
             "error"
           );
           return;
@@ -137,26 +130,18 @@
       }
     }
 
-    document
-      .getElementById("btnTestExport")
-      ?.addEventListener("click", safeRunExport);
+    document.getElementById("btnTestExport")?.addEventListener("click", safeRunExport);
 
-    document
-      .getElementById("btnCopyDebug")
-      ?.addEventListener("click", async () => {
-        try {
-          const text =
-            window.AEWError?.exportText?.() ||
-            "No AEWError log available yet.";
-          await navigator.clipboard.writeText(text);
-          window.AEWError?.show("Copied", "Debug log copied.", "info");
-        } catch {
-          const text =
-            window.AEWError?.exportText?.() ||
-            "No AEWError log available yet.";
-          window.prompt("Copy debug log:", text);
-        }
-      });
+    document.getElementById("btnCopyDebug")?.addEventListener("click", async () => {
+      try {
+        const text = window.AEWError?.exportText?.() || "No AEWError log available yet.";
+        await navigator.clipboard.writeText(text);
+        window.AEWError?.show("Copied", "Debug log copied to clipboard.", "info");
+      } catch {
+        const text = window.AEWError?.exportText?.() || "No AEWError log available yet.";
+        window.prompt("Copy debug log:", text);
+      }
+    });
   </script>
 </body>
 </html>
