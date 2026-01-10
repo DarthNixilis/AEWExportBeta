@@ -1,147 +1,113 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AEW Export Beta</title>
-
-  <style>
-    body {
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      margin: 0;
-      padding: 16px;
-    }
-    header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-    .row {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-    button {
-      padding: 10px 12px;
-      border-radius: 10px;
-      border: 1px solid #ddd;
-      background: #fff;
-    }
-    button:active { transform: translateY(1px); }
-    .panel {
-      margin-top: 14px;
-      border: 1px solid #e5e5e5;
-      border-radius: 12px;
-      padding: 12px;
-    }
-    .muted { opacity: 0.7; font-size: 12px; }
-    textarea {
-      width: 100%;
-      min-height: 180px;
-      border-radius: 12px;
-      border: 1px solid #ddd;
-      padding: 10px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-        "Liberation Mono", "Courier New", monospace;
-    }
-  </style>
-
-  <!-- 1) Error overlay must load first (non-module) -->
-  <script src="./error-overlay.js?v=3"></script>
-
-  <!--
-    2) Main app (module)
-    This keeps your existing architecture (main.js / listeners.js / etc) working.
-    main.js can import listeners.js, which can import ./exporter.js (the barrel),
-    which re-exports from exporter-lackey.js / exporter-image.js / exporter-text.js.
-  -->
-  <script type="module" src="./main.js?v=16"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AEW TCG Deck Constructor</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
-  <header>
-    <div>
-      <h1 style="margin:0;">AEW Export Beta</h1>
-      <div class="muted">
-        Mobile-friendly error popups enabled. If something breaks, hit “Copy Debug Log”.
-      </div>
+    <header>
+        <h1>AEW TCG Deck Constructor</h1>
+    </header>
+
+    <main class="container">
+        <div class="search-panel">
+            <div class="panel-header">
+                <h2>Card Pool</h2>
+                <div class="view-controls-container">
+                    <div id="gridSizeControls" class="grid-size-controls">
+                        <label>Grid Columns:</label>
+                        <button data-columns="2">2</button>
+                        <button data-columns="3">3</button>
+                        <button data-columns="4">4</button>
+                    </div>
+                    <button id="viewModeToggle">Switch to List View</button>
+                </div>
+            </div>
+            <div class="filter-controls">
+                <input type="text" id="searchInput" placeholder="Search card name or text...">
+                <div id="cascadingFiltersContainer" class="cascading-filters"></div>
+                <div class="sort-filter-container">
+                    <div class="sort-controls">
+                        <label for="sortSelect">Sort by:</label>
+                        <select id="sortSelect">
+                            <option value="alpha-asc">Name (A-Z)</option>
+                            <option value="alpha-desc">Name (Z-A)</option>
+                            <option value="cost-asc">Cost (Low-High)</option>
+                            <option value="cost-desc">Cost (High-Low)</option>
+                            <option value="damage-desc">Damage (High-Low)</option>
+                            <option value="damage-asc">Damage (Low-High)</option>
+                            <option value="momentum-desc">Momentum (High-Low)</option>
+                            <option value="momentum-asc">Momentum (Low-High)</option>
+                        </select>
+                    </div>
+                    <div class="cost-filter-controls">
+                        <label><input type="checkbox" id="showZeroCost" checked> Show 0-Cost</label>
+                        <label><input type="checkbox" id="showNonZeroCost" checked> Show Non-0-Cost</label>
+                    </div>
+                </div>
+            </div>
+            <div id="searchResults" class="card-list list-view"></div>
+        </div>
+
+        <div class="deck-panel">
+            <div class="persona-selection">
+                <h2>Persona</h2>
+                <select id="wrestlerSelect"><option value="">-- Select Wrestler --</option></select>
+                <select id="managerSelect"><option value="">-- Select Manager --</option></select>
+            </div>
+
+            <div id="personaDisplay" class="persona-display-container"></div>
+
+            <h2 id="startingDeckHeader">Starting Deck (<span id="startingDeckCount">0</span>/24)</h2>
+            <div id="startingDeckList" class="deck-list-small"></div>
+
+            <h2 id="purchaseDeckHeader">Purchase Deck (<span id="purchaseDeckCount">0</span>/36+)</h2>
+            <div id="purchaseDeckList" class="deck-list-small"></div>
+
+            <div class="deck-actions">
+                <button id="importDeck">Import Deck</button>
+                <button id="exportDeck">Export as Text</button>
+                <button id="exportLackeyBtn">Export for LackeyCCG</button>
+                <button id="exportAsImageBtn">Export as Image</button>
+                <button id="exportAllCards">Export All Cards as Images</button>
+                <button id="clearDeck">Clear Deck</button>
+            </div>
+        </div>
+    </main>
+
+    <div id="cardModal" class="modal-backdrop" style="display: none;">
+        <div class="modal-content">
+            <span class="modal-close-button">&times;</span>
+            <div id="modalCardContent"></div>
+        </div>
     </div>
 
-    <div class="row">
-      <button id="btnTestExport" type="button">TEST EXPORT (Lackey)</button>
-      <button id="btnCopyDebug" type="button">Copy Debug Log</button>
+    <div id="importModal" class="modal-backdrop" style="display: none;">
+        <div class="modal-content">
+            <span class="modal-close-button">&times;</span>
+            <h3>Import Decklist</h3>
+            <div class="import-controls">
+                <label for="deckFileInput">Import from .txt file:</label>
+                <input type="file" id="deckFileInput" accept=".txt">
+                <textarea id="deckTextInput" rows="10" placeholder="Or paste decklist here..."></textarea>
+                <button id="processImportBtn">Import</button>
+            </div>
+            <div id="importStatus" class="import-status"></div>
+        </div>
     </div>
-  </header>
 
-  <div class="panel">
-    <h2 style="margin-top:0;">Export Output</h2>
-    <div class="muted">
-      This is just a visible output box so you can see export results on Android.
-    </div>
-    <textarea id="exportOutput" placeholder="Export text will appear here..."></textarea>
-  </div>
+    <!-- Test button for debugging -->
+    <button onclick="testExport()" style="position: fixed; bottom: 10px; right: 10px; z-index: 10000; padding: 10px; background: red; color: white; border: none; border-radius: 4px; cursor: pointer;">
+        TEST EXPORT
+    </button>
 
-  <!--
-    3) Button wiring (module)
-    This is independent of your app’s existing listeners.js.
-    It gives you a guaranteed “TEST EXPORT” button that will work as long as:
-      - exporter.js exports exportForLackey
-      - exporter-lackey.js implements exportForLackey
-  -->
-  <script type="module">
-    import { exportForLackey } from "./exporter.js";
-
-    function showExportText(text) {
-      const box = document.getElementById("exportOutput");
-      if (!box) return;
-      box.value = String(text ?? "");
-    }
-
-    function safeRunExport() {
-      try {
-        if (typeof exportForLackey !== "function") {
-          window.AEWError?.show(
-            "Exporter Missing",
-            "exportForLackey is not a function. Check exporter.js re-exports and exporter-lackey.js export.",
-            "error"
-          );
-          return;
-        }
-
-        const result = exportForLackey();
-
-        if (typeof result === "string") {
-          showExportText(result);
-        } else if (result != null) {
-          showExportText(JSON.stringify(result, null, 2));
-        } else {
-          showExportText("[Export completed. No text returned.]");
-        }
-      } catch (e) {
-        window.AEWError?.show(
-          "Export Failed",
-          e?.message || String(e),
-          "error",
-          { stack: e?.stack }
-        );
-      }
-    }
-
-    document.getElementById("btnTestExport")?.addEventListener("click", safeRunExport);
-
-    document.getElementById("btnCopyDebug")?.addEventListener("click", async () => {
-      try {
-        const text = window.AEWError?.exportText?.() || "No AEWError log available yet.";
-        await navigator.clipboard.writeText(text);
-        window.AEWError?.show("Copied", "Debug log copied to clipboard.", "info");
-      } catch {
-        const text = window.AEWError?.exportText?.() || "No AEWError log available yet.";
-        window.prompt("Copy debug log:", text);
-      }
-    });
-  </script>
+    <!-- Load dependencies FIRST -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <script type="module" src="main.js"></script>
 </body>
-</html>
+</html> 

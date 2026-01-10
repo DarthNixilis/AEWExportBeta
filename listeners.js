@@ -1,91 +1,201 @@
 // listeners.js
-// ES module: app-init.js expects initializeAllEventListeners to be exported.
+import * as state from './config.js';
+import * as ui from './ui.js';
+import * as deck from './deck.js';
+import { parseAndLoadDeck } from './importer.js';
+import { generatePlainTextDeck, exportDeckAsImage, generateLackeyCCGDeck } from './exporter.js';
+import { exportAllCardsAsImages, exportAllCardsAsImagesFallback } from './master-export.js';
 
-import {
-  generateLackeyCCGDeck,
-  generatePlainTextDeck,
-  exportDeckAsImage
-} from "./exporter.js";
+export function initializeAllEventListeners(refreshCardPool) {
+    // POOL LISTENERS
+    const searchInput = document.getElementById('searchInput');
+    const sortSelect = document.getElementById('sortSelect');
+    const showZeroCostCheckbox = document.getElementById('showZeroCost');
+    const showNonZeroCostCheckbox = document.getElementById('showNonZeroCost');
+    const gridSizeControls = document.getElementById('gridSizeControls');
+    const viewModeToggle = document.getElementById('viewModeToggle');
+    const searchResults = document.getElementById('searchResults');
 
-function showErr(title, err) {
-  window.AEWError?.show(
-    title,
-    err?.message || String(err),
-    "error",
-    { stack: err?.stack }
-  );
-}
+    document.addEventListener('filtersChanged', refreshCardPool);
+    searchInput.addEventListener('input', state.debounce(refreshCardPool, 300));
+    sortSelect.addEventListener('change', (e) => { state.setCurrentSort(e.target.value); refreshCardPool(); });
+    showZeroCostCheckbox.addEventListener('change', (e) => { state.setShowZeroCost(e.target.checked); refreshCardPool(); });
+    showNonZeroCostCheckbox.addEventListener('change', (e) => { state.setShowNonZeroCost(e.target.checked); refreshCardPool(); });
+    gridSizeControls.addEventListener('click', (e) => {
+        if (e.target.tagName === 'BUTTON') {
+            state.setNumGridColumns(e.target.dataset.columns);
+            gridSizeControls.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
+            e.target.classList.add('active');
+            refreshCardPool();
+        }
+    });
+    viewModeToggle.addEventListener('click', () => {
+        const newMode = state.currentViewMode === 'list' ? 'grid' : 'list';
+        state.setCurrentViewMode(newMode);
+        viewModeToggle.textContent = newMode === 'list' ? 'Switch to Grid View' : 'Switch to List View';
+        refreshCardPool();
+    });
+    searchResults.addEventListener('click', (e) => {
+        const target = e.target;
+        const cardTitle = target.dataset.title || target.closest('[data-title]')?.dataset.title;
+        if (!cardTitle) return;
+        if (target.tagName === 'BUTTON') { deck.addCardToDeck(cardTitle, target.dataset.deckTarget); } 
+        else { ui.showCardModal(cardTitle); }
+    });
 
-function byId(id) {
-  return document.getElementById(id);
-}
+    // DECK LISTENERS
+    const wrestlerSelect = document.getElementById('wrestlerSelect');
+    const managerSelect = document.getElementById('managerSelect');
+    const startingDeckList = document.getElementById('startingDeckList');
+    const purchaseDeckList = document.getElementById('purchaseDeckList');
+    const personaDisplay = document.getElementById('personaDisplay');
+    const clearDeckBtn = document.getElementById('clearDeck');
+    const exportDeckBtn = document.getElementById('exportDeck');
+    const exportAsImageBtn = document.getElementById('exportAsImageBtn');
+    const exportAllCardsBtn = document.getElementById('exportAllCards');
+    
+    // Create or get the LackeyCCG export button
+    const exportLackeyBtn = document.getElementById('exportLackeyBtn') || createLackeyExportButton();
 
-function setOutputText(text) {
-  const out = byId("exportOutput");
-  if (out) out.value = String(text ?? "");
-}
+    wrestlerSelect.addEventListener('change', (e) => {
+        const newWrestler = state.cardTitleCache[e.target.value] || null;
+        state.setSelectedWrestler(newWrestler);
+        ui.renderPersonaDisplay();
+        refreshCardPool();
+        state.saveStateToCache();
+    });
+    managerSelect.addEventListener('change', (e) => {
+        const newManager = state.cardTitleCache[e.target.value] || null;
+        state.setSelectedManager(newManager);
+        ui.renderPersonaDisplay();
+        refreshCardPool();
+        state.saveStateToCache();
+    });
+    [startingDeckList, purchaseDeckList, personaDisplay].forEach(container => {
+        container.addEventListener('click', (e) => {
+            const target = e.target;
+            const cardTitle = target.dataset.title || target.closest('[data-title]')?.dataset.title;
+            if (!cardTitle) return;
+            if (target.tagName === 'BUTTON' && target.dataset.deck) { deck.removeCardFromDeck(cardTitle, target.dataset.deck); } 
+            else { ui.showCardModal(cardTitle); }
+        });
+    });
+    clearDeckBtn.addEventListener('click', () => {
+        if (confirm('Are you sure you want to clear the entire deck?')) {
+            state.setStartingDeck([]);
+            state.setPurchaseDeck([]);
+            ui.renderDecks();
+        }
+    });
+    exportDeckBtn.addEventListener('click', () => {
+        const text = generatePlainTextDeck();
+        const blob = new Blob([text], { type: 'text/plain' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        const wrestlerName = state.selectedWrestler ? state.toPascalCase(state.selectedWrestler.title) : "Deck";
+        a.download = `${wrestlerName}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+    });
+    
+    // NEW: LackeyCCG Export
+    exportLackeyBtn.addEventListener('click', () => {
+        const text = generateLackeyCCGDeck();
+        const blob = new Blob([text], { type: 'text/plain' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        const wrestlerName = state.selectedWrestler ? state.toPascalCase(state.selectedWrestler.title) : "Deck";
+        a.download = `${wrestlerName}-Lackey.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+    });
 
-function safeCall(label, fn, writeOutput = true) {
-  try {
-    if (typeof fn !== "function") {
-      throw new Error(`${label} exporter is not a function.`);
+    exportAsImageBtn.addEventListener('click', exportDeckAsImage);
+    
+    // Export All Cards button with fallback
+    if (exportAllCardsBtn) {
+        exportAllCardsBtn.addEventListener('click', async () => {
+            try {
+                await exportAllCardsAsImages();
+            } catch (error) {
+                console.error("Export failed:", error);
+                if (confirm("ZIP export failed. Would you like to try downloading images individually instead?")) {
+                    await exportAllCardsAsImagesFallback();
+                }
+            }
+        });
     }
-    const result = fn();
 
-    // Most exporters return a string; show it if available
-    if (writeOutput && typeof result === "string") {
-      setOutputText(result);
+    // MODAL LISTENERS
+    const importDeckBtn = document.getElementById('importDeck');
+    const importModal = document.getElementById('importModal');
+    const importModalCloseBtn = importModal.querySelector('.modal-close-button');
+    const deckFileInput = document.getElementById('deckFileInput');
+    const deckTextInput = document.getElementById('deckTextInput');
+    const processImportBtn = document.getElementById('processImportBtn');
+    const cardModal = document.getElementById('cardModal');
+    const modalCloseButton = cardModal.querySelector('.modal-close-button');
+
+    importDeckBtn.addEventListener('click', () => {
+        importModal.style.display = 'flex';
+        document.getElementById('importStatus').textContent = '';
+        deckTextInput.value = '';
+        deckFileInput.value = '';
+    });
+    importModalCloseBtn.addEventListener('click', () => importModal.style.display = 'none');
+    processImportBtn.addEventListener('click', () => { if (deckTextInput.value) { parseAndLoadDeck(deckTextInput.value); } });
+    deckFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => { parseAndLoadDeck(event.target.result); };
+            reader.readAsText(file);
+        }
+    });
+    modalCloseButton.addEventListener('click', () => cardModal.style.display = 'none');
+    cardModal.addEventListener('click', (e) => { if (e.target === cardModal) cardModal.style.display = 'none'; });
+    importModal.addEventListener('click', (e) => { if (e.target === importModal) importModal.style.display = 'none'; });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            cardModal.style.display = 'none';
+            importModal.style.display = 'none';
+            if (state.lastFocusedElement) { state.lastFocusedElement.focus(); }
+        }
+    });
+}
+
+// Helper to create the Lackey export button if it doesn't exist
+function createLackeyExportButton() {
+    const deckActions = document.querySelector('.deck-actions');
+    if (!deckActions) return null;
+    
+    const lackeyBtn = document.createElement('button');
+    lackeyBtn.id = 'exportLackeyBtn';
+    lackeyBtn.textContent = 'Export for LackeyCCG';
+    lackeyBtn.style.backgroundColor = '#17a2b8';
+    lackeyBtn.style.color = 'white';
+    lackeyBtn.style.border = 'none';
+    lackeyBtn.style.borderRadius = '4px';
+    lackeyBtn.style.cursor = 'pointer';
+    lackeyBtn.style.padding = '10px 15px';
+    lackeyBtn.style.marginLeft = '10px';
+    lackeyBtn.style.marginBottom = '5px';
+    
+    // Insert after exportDeckBtn or before exportAsImageBtn
+    const exportDeckBtn = document.getElementById('exportDeck');
+    const exportAsImageBtn = document.getElementById('exportAsImageBtn');
+    
+    if (exportDeckBtn && exportAsImageBtn) {
+        deckActions.insertBefore(lackeyBtn, exportAsImageBtn);
+    } else if (exportDeckBtn) {
+        deckActions.insertBefore(lackeyBtn, exportDeckBtn.nextSibling);
+    } else {
+        deckActions.appendChild(lackeyBtn);
     }
-
-    return result;
-  } catch (e) {
-    showErr(`${label} Failed`, e);
-    return null;
-  }
-}
-
-function wireButton(id, handler) {
-  const btn = byId(id);
-  if (!btn) return false;
-  btn.addEventListener("click", handler);
-  return true;
-}
-
-/**
- * This is the function app-init.js imports and calls.
- * It should be safe to call even if some buttons/inputs don't exist.
- */
-export function initializeAllEventListeners() {
-  // Export buttons (IDs you can standardize in your HTML)
-  wireButton("btnExportPlainText", () => safeCall("Plain Text Export", generatePlainTextDeck, true));
-  wireButton("btnExportLackey", () => safeCall("Lackey Export", generateLackeyCCGDeck, true));
-  wireButton("btnExportImage", () => safeCall("Image Export", exportDeckAsImage, false));
-
-  // Your earlier index wiring used this ID too, so support it:
-  wireButton("btnTestExport", () => safeCall("TEST EXPORT (Lackey)", generateLackeyCCGDeck, true));
-
-  // Copy debug log button (optional)
-  wireButton("btnCopyDebug", async () => {
-    try {
-      const text = window.AEWError?.exportText?.() || "No AEWError log available yet.";
-      await navigator.clipboard.writeText(text);
-      window.AEWError?.show("Copied", "Debug log copied to clipboard.", "info");
-    } catch {
-      const text = window.AEWError?.exportText?.() || "No AEWError log available yet.";
-      window.prompt("Copy debug log:", text);
-    }
-  });
-
-  // If you have other UI listeners in the original listeners.js (filters, search, add/remove cards),
-  // we can re-add them here safely once exports/imports are stable.
-}
-
-// Optional: also auto-init if someone loads listeners.js directly without app-init.js.
-// This will NOT break app-init.js, it just makes the module usable standalone.
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => {
-    try { initializeAllEventListeners(); } catch (e) { showErr("Listener Init Failed", e); }
-  });
-} else {
-  try { initializeAllEventListeners(); } catch (e) { showErr("Listener Init Failed", e); }
+    
+    return lackeyBtn;
 }
